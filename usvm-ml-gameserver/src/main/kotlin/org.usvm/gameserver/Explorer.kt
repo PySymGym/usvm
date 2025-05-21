@@ -33,6 +33,7 @@ fun randomExplorer(
     return GameOver(
         floor(percentageCoverage).toUInt(),
         test = tests.toUInt(),
+        stepsCount = gameMap.stepsToStart + gameMap.stepsToStart, // TODO: send the actual step count
         error = errors.toUInt()
     )
 }
