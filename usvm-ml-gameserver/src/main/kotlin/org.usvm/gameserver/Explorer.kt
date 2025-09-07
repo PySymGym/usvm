@@ -46,7 +46,7 @@ private fun cloneDefaultOptions(gameMap: GameMap, predict: (GameState) -> UInt):
     return defaultOptions.copy(
         pathSelectionStrategies = listOf(defaultSearcher, PathSelectionStrategy.AI),
         stepLimit = stepLimit,
-        stepsToStart = gameMap.stepsToStart,
+        stepsToStart = gameMap.stepsToStart + gameMap.stepsToPlay,
         oracle = OracleImpl<BasicBlock>(predict)
     )
 }
