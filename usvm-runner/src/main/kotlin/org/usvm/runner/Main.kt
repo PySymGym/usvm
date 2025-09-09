@@ -45,7 +45,7 @@ fun main(args: Array<String>) {
 
     val runner = JavaMethodRunner(
         defaultOptions.copy(
-            oracle = OnnxModelImpl<BasicBlock>(model, mode, true)
+            oracle = OnnxModelImpl<BasicBlock>(model, mode, false)
         ),
         classpath = path
     )
