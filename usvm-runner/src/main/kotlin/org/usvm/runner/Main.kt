@@ -6,6 +6,7 @@ import kotlinx.cli.ArgType
 import kotlinx.cli.default
 import kotlinx.cli.required
 import org.slf4j.LoggerFactory
+import org.usvm.PathSelectionStrategy
 import org.usvm.statistics.BasicBlock
 import org.usvm.utils.Mode
 import org.usvm.utils.OnnxModelImpl
@@ -43,7 +44,9 @@ fun main(args: Array<String>) {
 
 
     val runner = JavaMethodRunner(
-        defaultOptions.copy(oracle = OnnxModelImpl<BasicBlock>(model, mode)),
+        defaultOptions.copy(
+            oracle = OnnxModelImpl<BasicBlock>(model, mode, true)
+        ),
         classpath = path
     )
 

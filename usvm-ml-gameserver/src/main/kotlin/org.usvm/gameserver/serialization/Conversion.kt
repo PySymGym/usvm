@@ -4,6 +4,7 @@ import org.usvm.gameserver.GameEdgeLabel
 import org.usvm.gameserver.GameMapEdge
 import org.usvm.gameserver.GameMapVertex
 import org.usvm.gameserver.GameState
+import org.usvm.gameserver.PathConditionVertex
 import org.usvm.gameserver.State
 import org.usvm.gameserver.StateHistoryElem
 import org.usvm.statistics.BasicBlock
@@ -15,17 +16,16 @@ import org.usvm.utils.StateWrapper
 
 private fun StateHistoryElement.toStateHistoryElem(): StateHistoryElem {
     return StateHistoryElem(
-        blockId.toUInt(),
-        numOfVisits.toUInt(),
-        stepWhenVisitedLastTime.toUInt()
+        blockId.toUInt(), numOfVisits.toUInt(), stepWhenVisitedLastTime.toUInt()
     )
 }
 
 private fun <Block : BasicBlock> StateWrapper<*, *, Block>.toState(): State {
+    val pc = PathConditionVertex(id.toInt(), 0, listOf())
     return State(
         id,
         position.toUInt(),
-        pathConditionSize.toUInt(),
+        pc,
         visitedAgainVertices.toUInt(),
         visitedNotCoveredVerticesInZone.toUInt(),
         visitedNotCoveredVerticesOutOfZone.toUInt(),
@@ -46,7 +46,7 @@ private fun <Block : BasicBlock> Block.toGameMapVertex(): GameMapVertex {
         touchedByState,
         containsCall,
         containsThrow,
-        states
+        states.toList()
     )
 }
 
@@ -54,25 +54,19 @@ private fun <Block : BasicBlock> BlockGraph<*, Block, *>.toGameMapEdge(blocks: C
     return blocks.flatMap { block ->
         val successorsEdges = successors(block).map { successor ->
             GameMapEdge(
-                vertexFrom = block.id.toUInt(),
-                vertexTo = successor.id.toUInt(),
-                label = GameEdgeLabel(0)
+                vertexFrom = block.id.toUInt(), vertexTo = successor.id.toUInt(), label = GameEdgeLabel(0)
             )
         }
 
         val calleesEdges = callees(block).map { callee ->
             GameMapEdge(
-                vertexFrom = block.id.toUInt(),
-                vertexTo = callee.id.toUInt(),
-                label = GameEdgeLabel(1)
+                vertexFrom = block.id.toUInt(), vertexTo = callee.id.toUInt(), label = GameEdgeLabel(1)
             )
         }
 
         val returnOfEdges = returnOf(block).map { returnSite ->
             GameMapEdge(
-                vertexFrom = block.id.toUInt(),
-                vertexTo = returnSite.id.toUInt(),
-                label = GameEdgeLabel(2)
+                vertexFrom = block.id.toUInt(), vertexTo = returnSite.id.toUInt(), label = GameEdgeLabel(2)
             )
         }
 
@@ -80,13 +74,24 @@ private fun <Block : BasicBlock> BlockGraph<*, Block, *>.toGameMapEdge(blocks: C
     }
 }
 
+var pcs = mutableSetOf<Int>()
+
 fun <Block : BasicBlock> createGameState(
     game: Game<Block>
 ): GameState {
     val (vertices, stateWrappers, blockGraph) = game
+    val states = stateWrappers.map { it.toState() }
+    val pcVertices = mutableListOf<PathConditionVertex>() // Mock value | TODO: collect the actual PC
+    for (state in states) {
+        if (!pcs.contains(state.pathCondition.id)) {
+            pcVertices.add(state.pathCondition)
+            pcs.add(state.pathCondition.id)
+        }
+    }
     return GameState(
         graphVertices = vertices.map { it.toGameMapVertex() },
-        states = stateWrappers.map { it.toState() },
+        pathConditionVertices = pcVertices,
+        states = states,
         map = blockGraph.toGameMapEdge(vertices)
     )
 }

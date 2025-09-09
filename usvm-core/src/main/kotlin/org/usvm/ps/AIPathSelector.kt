@@ -1,13 +1,13 @@
 package org.usvm.ps
+
 import org.usvm.UPathSelector
 import org.usvm.UState
 import org.usvm.statistics.BasicBlock
 import org.usvm.statistics.BlockGraph
 import org.usvm.statistics.StepsStatistics
-import org.usvm.util.OnnxModel
-import org.usvm.util.Oracle
 import org.usvm.util.Predictor
 import org.usvm.utils.Game
+import org.usvm.utils.OnnxModelImpl
 import org.usvm.utils.StateWrapper
 import org.usvm.utils.isSat
 
@@ -17,8 +17,7 @@ class AIPathSelector<Statement, State, Block>(
     private val stepsStatistics: StepsStatistics<*, State>,
     private val predictor: Predictor<Game<Block>>,
 ) : UPathSelector<State> where
-State : UState<*, *, Statement, *, *, State>,
-Block : BasicBlock {
+State : UState<*, *, Statement, *, *, State>, Block : BasicBlock {
     private val statesMap = mutableMapOf<State, StateWrapper<Statement, State, Block>>()
     private val lastPeekedState: State?
         get() = stepsStatistics.lastPeekedState
@@ -43,12 +42,14 @@ Block : BasicBlock {
     }
 
     private fun buildGame(
-        vertices: List<Block>,
-        wrappers: MutableCollection<StateWrapper<Statement, State, Block>>
+        vertices: List<Block>, wrappers: MutableCollection<StateWrapper<Statement, State, Block>>
     ): Game<Block> {
-        val game = when (predictor) {
-            is OnnxModel<Game<Block>> -> Game(vertices, wrappers, blockGraph)
-            is Oracle<Game<Block>> -> {
+        val game = when {
+            predictor is OnnxModelImpl<*> && !predictor.isTrainMode -> {
+                Game(vertices, wrappers, blockGraph)
+            }
+
+            else -> {
                 // if we played with default searcher before,
                 // client has no information about the game
                 if (firstSend) {
@@ -110,8 +111,7 @@ Block : BasicBlock {
              * If state [isSat], some blocks may have been covered by
              * [org.usvm.statistics.CoverageStatistics.onStateTerminated]
              */
-            if (state.isSat())
-                touchedBlocks.addAll(wrapper.history.keys)
+            if (state.isSat()) touchedBlocks.addAll(wrapper.history.keys)
 
             touchedStates.remove(wrapper)
         }
@@ -120,15 +120,9 @@ Block : BasicBlock {
     override fun add(states: Collection<State>) {
         // is null iff we are adding initial state
         val lastPeekedStateWrapper = statesMap[lastPeekedState]
-        val parentPathConditionSize = lastPeekedStateWrapper?.pathConditionSize ?: 0
         val parentHistory = lastPeekedStateWrapper?.history ?: mutableMapOf()
         val wrappers = states.map { state ->
-            val wrapper = StateWrapper(
-                state,
-                parentPathConditionSize,
-                parentHistory,
-                blockGraph
-            )
+            val wrapper = StateWrapper(state, parentHistory, blockGraph)
             statesMap[state] = wrapper
             wrapper
         }

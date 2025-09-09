@@ -7,7 +7,7 @@ import org.usvm.utils.Game
 
 
 @Suppress("UNUSED")
-fun<Block: BasicBlock> Game<Block>.dotGraph(
+fun <Block : BasicBlock> Game<Block>.dotGraph(
     historyEdges: Boolean = false,
     parentEdges: Boolean = true,
     colorNonCoverageZone: Boolean = true,
@@ -90,7 +90,6 @@ fun<Block: BasicBlock> Game<Block>.dotGraph(
                             "Visited Not Covered In Zone: ${state.visitedNotCoveredVerticesInZone}\\n" +
                             "Visited Not Covered Out Of Zone: ${state.visitedNotCoveredVerticesOutOfZone}\\n" +
                             "Position: ${state.position}\\n" +
-                            "Path Condition Size: ${state.pathConditionSize}\\n" +
                             "Visited Again Vertices: ${state.visitedAgainVertices}\\n" +
                             "Instructions Visited In Current Block: ${state.instructionsVisitedInCurrentBlock}\\n" +
                             "Step When Moved Last Time: ${state.stepWhenMovedLastTime}"

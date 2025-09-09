@@ -13,7 +13,6 @@ data class StateHistoryElement(
 
 class StateWrapper<Statement, State, Block>(
     private val state: State,
-    private val parentPathConditionSize: Int,
     private val parentHistory: MutableMap<Block, StateHistoryElement>,
     private val blockGraph: BlockGraph<*, Block, Statement>,
 ) where State : UState<*, *, Statement, *, *, State>, Block : BasicBlock {
@@ -24,7 +23,6 @@ class StateWrapper<Statement, State, Block>(
     private var visitedStatement: Statement? = null
     lateinit var currentBlock: Block
     var position by Delegates.notNull<Int>()
-    var pathConditionSize by Delegates.notNull<Int>()
     var visitedAgainVertices by Delegates.notNull<Int>()
     var visitedNotCoveredVerticesInZone by Delegates.notNull<Int>()
     var visitedNotCoveredVerticesOutOfZone by Delegates.notNull<Int>()
@@ -42,7 +40,6 @@ class StateWrapper<Statement, State, Block>(
             currentBlock.states.add(this@StateWrapper.id)
 
             position = currentBlock.id
-            pathConditionSize = parentPathConditionSize + state.forkPoints.depth
             instructionsVisitedInCurrentBlock = 0
         }
         instructionsVisitedInCurrentBlock++

@@ -41,7 +41,7 @@ fun Application.configureSockets() {
                                 false -> {
                                     thisConnection.startGame {
                                         val explorationResult: GameOver = async(Dispatchers.Default) {
-                                            randomExplorer(
+                                            eachStepExplorer(
                                                 inputBody = inputBody,
                                                 getNextStep = { runBlocking { thisConnection.getStep() } },
                                                 sendOutputMessageBody = { outputMessageBody ->

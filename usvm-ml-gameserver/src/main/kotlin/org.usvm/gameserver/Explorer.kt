@@ -8,7 +8,7 @@ import org.usvm.runner.defaultOptions
 import org.usvm.statistics.BasicBlock
 import kotlin.math.floor
 
-fun randomExplorer(
+fun eachStepExplorer(
     inputBody: Start,
     getNextStep: () -> Step,
     sendOutputMessageBody: (outputMessageBody: OutputMessageBody) -> Unit,

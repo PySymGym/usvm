@@ -5,6 +5,7 @@ plugins {
     id(Plugins.Ktor)
     kotlin("plugin.serialization") version Versions.kotlin
     application
+    kotlin
 }
 
 application {

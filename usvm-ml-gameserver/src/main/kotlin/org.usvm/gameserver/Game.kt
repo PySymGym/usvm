@@ -22,10 +22,17 @@ data class StateHistoryElem(
 )
 
 @Serializable
+data class PathConditionVertex(
+    @SerialName("Id") val id: Int,
+    @SerialName("Type") val type: Int,
+    @SerialName("Children") val children: List<Int>,
+)
+
+@Serializable
 data class State(
     @SerialName("Id") val id: UInt,
     @SerialName("Position") val position: UInt,
-    @SerialName("PathConditionSize") val pathConditionSize: UInt,
+    @SerialName("PathCondition") val pathCondition: PathConditionVertex,
     @SerialName("VisitedAgainVertices") val visitedAgainVertices: UInt,
     @SerialName("VisitedNotCoveredVerticesInZone") val visitedNotCoveredVerticesInZone: UInt,
     @SerialName("VisitedNotCoveredVerticesOutOfZone") val visitedNotCoveredVerticesOutOfZone: UInt,
@@ -61,6 +68,7 @@ data class GameMapEdge(
 @Serializable
 data class GameState(
     @SerialName("GraphVertices") val graphVertices: List<GameMapVertex>,
+    @SerialName("PathConditionVertices") val pathConditionVertices: List<PathConditionVertex>,
     @SerialName("States") val states: List<State>,
     @SerialName("Map") val map: List<GameMapEdge>
 )
@@ -73,11 +81,14 @@ data class MoveRewardData(
 
 @Serializable
 data class Reward(
-    @SerialName("ForMove") val forMove: MoveRewardData,
-    @SerialName("MaxPossibleReward") val maxPossibleReward: UInt
+    @SerialName("ForMove") val forMove: MoveRewardData, @SerialName("MaxPossibleReward") val maxPossibleReward: UInt
 ) {
-    constructor(forCoverage: UInt, forVisitedInstructions: UInt, maxPossibleReward: UInt) :
-            this(MoveRewardData(forCoverage, forVisitedInstructions), maxPossibleReward)
+    constructor(forCoverage: UInt, forVisitedInstructions: UInt, maxPossibleReward: UInt) : this(
+        MoveRewardData(
+            forCoverage,
+            forVisitedInstructions
+        ), maxPossibleReward
+    )
 }
 
 @Serializable
