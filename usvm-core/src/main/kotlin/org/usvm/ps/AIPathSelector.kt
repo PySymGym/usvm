@@ -8,6 +8,7 @@ import org.usvm.statistics.StepsStatistics
 import org.usvm.util.Predictor
 import org.usvm.utils.Game
 import org.usvm.utils.OnnxModelImpl
+import org.usvm.utils.PathConditionVertex
 import org.usvm.utils.StateWrapper
 import org.usvm.utils.isSat
 
@@ -19,6 +20,7 @@ class AIPathSelector<Statement, State, Block>(
 ) : UPathSelector<State> where
 State : UState<*, *, Statement, *, *, State>, Block : BasicBlock {
     private val statesMap = mutableMapOf<State, StateWrapper<Statement, State, Block>>()
+    private val pathConditionVertices: MutableList<PathConditionVertex> = mutableListOf()
     private val lastPeekedState: State?
         get() = stepsStatistics.lastPeekedState
     private val totalSteps
@@ -34,7 +36,7 @@ State : UState<*, *, Statement, *, *, State>, Block : BasicBlock {
     private fun predict(): State {
         val wrappers = statesMap.values
         val vertices = blockGraph.blocks
-        val game = buildGame(vertices, wrappers)
+        val game = buildGame(vertices, wrappers, pathConditionVertices)
         val predictedId = predictor.predictState(game)
         val predictedState = statesMap.keys.find { it.id == predictedId }
 
@@ -42,11 +44,13 @@ State : UState<*, *, Statement, *, *, State>, Block : BasicBlock {
     }
 
     private fun buildGame(
-        vertices: List<Block>, wrappers: MutableCollection<StateWrapper<Statement, State, Block>>
+        vertices: List<Block>,
+        wrappers: MutableCollection<StateWrapper<Statement, State, Block>>,
+        pathConditionVertices: Collection<PathConditionVertex>
     ): Game<Block> {
         val game = when {
             predictor is OnnxModelImpl<*> && !predictor.isTrainMode -> {
-                Game(vertices, wrappers, blockGraph)
+                Game(vertices, wrappers, blockGraph, pathConditionVertices.toList())
             }
 
             else -> {
@@ -54,14 +58,16 @@ State : UState<*, *, Statement, *, *, State>, Block : BasicBlock {
                 // client has no information about the game
                 if (firstSend) {
                     firstSend = false
-                    Game(vertices, wrappers, blockGraph)
+                    Game(vertices, wrappers, blockGraph, pathConditionVertices.toList())
                 } else {
                     if (blockGraph.newBlocks != newBlocks) {
                         touchedBlocks.addAll(blockGraph.newBlocks)
                         newBlocks = blockGraph.newBlocks.toList()
                     }
                     if (touchedStates.isEmpty()) touchedStates.addAll(wrappers)
-                    val delta = Game(touchedBlocks.toList(), touchedStates.toList(), blockGraph)
+                    val pathConditionVerticesDelta = touchedStates.map { it.pathConditionVertex }
+                    val delta =
+                        Game(touchedBlocks.toList(), touchedStates.toList(), blockGraph, pathConditionVerticesDelta)
                     delta
                 }
             }
@@ -114,6 +120,7 @@ State : UState<*, *, Statement, *, *, State>, Block : BasicBlock {
             if (state.isSat()) touchedBlocks.addAll(wrapper.history.keys)
 
             touchedStates.remove(wrapper)
+            pathConditionVertices.remove(wrapper.pathConditionVertex)
         }
     }
 
@@ -128,6 +135,7 @@ State : UState<*, *, Statement, *, *, State>, Block : BasicBlock {
         }
         touchedStates.addAll(wrappers)
         lastPeekedStateWrapper?.addChildren(wrappers)
+        pathConditionVertices.addAll(touchedStates.map { it.pathConditionVertex })
     }
 
     override fun update(state: State) {

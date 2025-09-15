@@ -19,6 +19,7 @@ class StateWrapper<Statement, State, Block>(
     val children = mutableSetOf<StateWrapper<Statement, State, Block>>()
     val history = parentHistory.toMutableMap()
     val id = state.id
+    val pathConditionVertex = PathConditionVertex(id.toInt(), 0, emptyList())
 
     private var visitedStatement: Statement? = null
     lateinit var currentBlock: Block

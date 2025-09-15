@@ -13,6 +13,12 @@ import java.nio.FloatBuffer
 import java.nio.LongBuffer
 import kotlin.collections.toLongArray
 
+data class PathConditionVertex(
+    val id: Int,
+    val type: Int,
+    val children: List<Int>,
+)
+
 enum class Mode {
     CPU, GPU
 }
@@ -52,10 +58,27 @@ class OnnxModelImpl<Block : BasicBlock>(
         }
     }
     private val session: OrtSession = env.createSession(pathToONNX, sessionOptions)
+    lateinit var gameState: Game<Block>
 
-    override fun predictState(game: Game<Block>): UInt {
+    override fun predictState(game: Game<Block>): UInt { // game=delta!!!
+        gameState = if (!::gameState.isInitialized) {
+            game
+        } else {
+            val pcIds = gameState.pathConditionVertices.map { it.id }
+            Game(
+                vertices = gameState.vertices,
+                stateWrappers = gameState.stateWrappers,
+                blockGraph = game.blockGraph,
+                pathConditionVertices = gameState.pathConditionVertices.toMutableList().also {
+                    for (pc in game.pathConditionVertices) {
+                        if (!pcIds.contains(pc.id)) {
+                            it.add(pc)
+                        }
+                    }
+                })
+        }
         val stateIds = mutableMapOf<StateId, Int>()
-        val input = generateInput(game, stateIds)
+        val input = generateInput(gameState, stateIds)
         val output = session.run(input)
         val predictedStates = output["out"].get().value as Array<*>
         val predictedStatesRanks = predictedStates.map { (it as FloatArray).toList() }
@@ -66,7 +89,7 @@ class OnnxModelImpl<Block : BasicBlock>(
     private fun generateInput(
         game: Game<Block>, stateIds: MutableMap<StateId, Int>
     ): Map<String, OnnxTensor> {
-        val (vertices, stateWrappers, blockGraph) = game
+        val (vertices, stateWrappers, blockGraph, pathConditionVertices) = game
         val vertexIds = mutableMapOf<Int, Int>()
         val gameVertices = tensorFromBasicBlocks(vertices, vertexIds)
         val states = tensorFromStates(stateWrappers, stateIds)
@@ -77,28 +100,53 @@ class OnnxModelImpl<Block : BasicBlock>(
             stateWrappers, stateIds, vertexIds
         )
         val vertexToState = tensorFromStatePositions(stateWrappers, stateIds, vertexIds)
-        val mockPC1 = createTensor(env, FloatBuffer.wrap(FloatArray(0)), longArrayOf(0, 49))
-        val mockPC2 = createTensor(env, LongBuffer.wrap(LongArray(0)), longArrayOf(2, 0))
-        val mockPC3 =
-            createTensor(env, LongBuffer.wrap(LongArray(0)), longArrayOf(2, 0))
+        fun createPCMap(pathConditionVertices: Collection<PathConditionVertex>): Map<Int, Int> {
+            val pcMap = mutableMapOf<Int, Int>()
+            for ((index, vertex) in pathConditionVertices.filter { stateIds.containsKey(it.id.toUInt()) }.withIndex()) {
+                pcMap[vertex.id] = index
+            }
+            return pcMap
+        }
+
+        fun createStateMap(states: Collection<StateWrapper<*, *, *>>): Map<Int, Int> {
+            val stateMap = mutableMapOf<Int, Int>()
+            for ((index, state) in states.withIndex()) {
+                stateMap[state.id.toInt()] = index
+            }
+            return stateMap
+        }
+
+        val stateMap = createStateMap(stateWrappers)
+        val pcMap = createPCMap(pathConditionVertices)
+        val (pcv, pcvToPCV) = createPathConditionTensors(
+            pathConditionVertices, pcMap
+        )
+        val pcvToSV = createPathConditionStateTensors(stateWrappers, pcMap, stateMap)
+
         return mapOf(
             "game_vertex" to gameVertices,
             "state_vertex" to states,
-            "path_condition_vertex" to mockPC1,
+            "path_condition_vertex" to pcv,
             "gamevertex_to_gamevertex_index" to vertexToVertexEdgesIndex,
             "gamevertex_to_gamevertex_type" to vertexToVertexEdgesAttributes,
             "gamevertex_history_statevertex_index" to historyEdgesIndexVertexToState,
             "gamevertex_history_statevertex_attrs" to historyEdgesAttributes,
             "gamevertex_in_statevertex" to vertexToState,
             "statevertex_parentof_statevertex" to parentOfEdges,
-            "pathconditionvertex_to_pathconditionvertex" to mockPC2,
-            "pathconditionvertex_to_statevertex" to mockPC3,
+            "pathconditionvertex_to_pathconditionvertex" to pcvToPCV,
+            "pathconditionvertex_to_statevertex" to pcvToSV,
         )
     }
 
     private fun getPredictedState(stateRank: List<List<Float>>, stateIds: Map<StateId, Int>): StateId? {
         return stateRank.mapIndexed { index, ranks -> stateIds.entries.find { it.value == index }?.key to ranks.sum() }
-            .maxBy { it.second }.first
+            .maxBy {
+                if (it.first == null) {
+                    Float.NEGATIVE_INFINITY
+                } else {
+                    it.second
+                }
+            }.first
     }
 
     private fun tensorFromBasicBlocks(vertices: Collection<Block>, vertexIds: MutableMap<Int, Int>): OnnxTensor {
@@ -155,7 +203,6 @@ class OnnxModelImpl<Block : BasicBlock>(
         }
 
         val indexList = (vertexFrom + vertexTo).toLongArray()
-
         return createLongTensor(indexList, 2, vertexFrom.size) to createLongTensor(
             attributes.toLongArray(), attributes.size
         )
@@ -213,6 +260,86 @@ class OnnxModelImpl<Block : BasicBlock>(
             }
         }
         return createLongTensor(vertexToState, 2, totalStates)
+    }
+
+    fun createPathConditionTensors(
+        pathConditionVertices: Collection<PathConditionVertex>, pcMap: Map<Int, Int>
+    ): Pair<OnnxTensor, OnnxTensor> {
+        val pcLength = 49
+
+        val pcFeatures = mutableListOf<FloatArray>()
+        for (vertex in pathConditionVertices) {
+            val oneHot = FloatArray(pcLength) { 0f }
+            oneHot[vertex.type] = 1f
+            pcFeatures.add(oneHot)
+        }
+        val pcEdges = mutableListOf<LongArray>()
+        for (vertex in pathConditionVertices) {
+            for (childId in vertex.children) {
+                val fromIdx = pcMap[vertex.id]!!
+                val toIdx = pcMap[childId]!!
+                pcEdges.add(longArrayOf(fromIdx.toLong(), toIdx.toLong()))
+                pcEdges.add(longArrayOf(toIdx.toLong(), fromIdx.toLong()))
+            }
+        }
+
+        val featuresBuffer = FloatBuffer.allocate(pcFeatures.size * pcLength).apply {
+            for (feature in pcFeatures) {
+                put(feature)
+            }
+            rewind()
+        }
+
+        val edgesBuffer = if (pcEdges.isNotEmpty()) {
+            LongBuffer.allocate(pcEdges.size * 2).apply {
+                for (edge in pcEdges) {
+                    put(edge[0])
+                    put(edge[1])
+                }
+                rewind()
+            }
+        } else {
+            LongBuffer.wrap(LongArray(0))
+        }
+        return Pair(
+            createTensor(
+                env, featuresBuffer, longArrayOf(pcFeatures.size.toLong(), pcLength.toLong())
+            ), createTensor(
+                env, edgesBuffer, longArrayOf(2, pcEdges.size.toLong())
+            )
+        )
+    }
+
+    fun createPathConditionStateTensors(
+        states: Collection<StateWrapper<*, *, *>>, pcMap: Map<Int, Int>, stateMap: Map<Int, Int>
+    ): OnnxTensor {
+        val pcToStateEdges = mutableListOf<LongArray>()
+        for (stateWrapper in states) {
+            val pcId = stateWrapper.pathConditionVertex.id
+            val stateId = stateWrapper.id.toInt()
+
+            val pcIndex = pcMap[pcId] ?: continue
+            val stateIndex = stateMap[stateId] ?: continue
+
+            if (pcIndex < pcMap.size && stateIndex < stateMap.size) {
+                pcToStateEdges.add(longArrayOf(pcIndex.toLong(), stateIndex.toLong()))
+            }
+        }
+
+        val pcToStateTensor = createEdgeTensor(pcToStateEdges)
+        return pcToStateTensor
+    }
+
+    fun createEdgeTensor(edges: List<LongArray>): OnnxTensor {
+        val edgesSize = if (edges.isEmpty()) 0 else edges.size
+        val buffer = LongBuffer.allocate(edgesSize * 2).apply {
+            for (edge in edges) {
+                put(edge[0])
+                put(edge[1])
+            }
+            rewind()
+        }
+        return createTensor(env, buffer, longArrayOf(2, edgesSize.toLong()))
     }
 
     private fun createFloatTensor(data: FloatArray, vararg numbers: Int): OnnxTensor {

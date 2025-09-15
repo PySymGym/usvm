@@ -21,11 +21,10 @@ private fun StateHistoryElement.toStateHistoryElem(): StateHistoryElem {
 }
 
 private fun <Block : BasicBlock> StateWrapper<*, *, Block>.toState(): State {
-    val pc = PathConditionVertex(id.toInt(), 0, listOf())
     return State(
         id,
         position.toUInt(),
-        pc,
+        pathConditionVertex.toPathConditionVertex(),
         visitedAgainVertices.toUInt(),
         visitedNotCoveredVerticesInZone.toUInt(),
         visitedNotCoveredVerticesOutOfZone.toUInt(),
@@ -74,23 +73,20 @@ private fun <Block : BasicBlock> BlockGraph<*, Block, *>.toGameMapEdge(blocks: C
     }
 }
 
+fun org.usvm.utils.PathConditionVertex.toPathConditionVertex(): PathConditionVertex {
+    return PathConditionVertex(id, type, children)
+}
+
 var pcs = mutableSetOf<Int>()
 
 fun <Block : BasicBlock> createGameState(
     game: Game<Block>
 ): GameState {
-    val (vertices, stateWrappers, blockGraph) = game
+    val (vertices, stateWrappers, blockGraph, pathConditionVertices) = game
     val states = stateWrappers.map { it.toState() }
-    val pcVertices = mutableListOf<PathConditionVertex>() // Mock value | TODO: collect the actual PC
-    for (state in states) {
-        if (!pcs.contains(state.pathCondition.id)) {
-            pcVertices.add(state.pathCondition)
-            pcs.add(state.pathCondition.id)
-        }
-    }
     return GameState(
         graphVertices = vertices.map { it.toGameMapVertex() },
-        pathConditionVertices = pcVertices,
+        pathConditionVertices = pathConditionVertices.map { it.toPathConditionVertex() },
         states = states,
         map = blockGraph.toGameMapEdge(vertices)
     )
