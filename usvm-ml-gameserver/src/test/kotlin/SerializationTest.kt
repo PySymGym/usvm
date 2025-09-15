@@ -17,7 +17,7 @@ class SerializationTest {
 
     @Test
     fun gameStateTest() {
-        val gameState = GameState(listOf(), listOf(), listOf())
+        val gameState = GameState(listOf(), listOf(), listOf(), listOf())
 
         val serialized = Json.encodeToString(gameState)
         val deserialized = Json.decodeFromString<GameState>(serialized)
@@ -52,6 +52,7 @@ class SerializationTest {
                     states = listOf(1u, 3u)
                 )
             ),
+            listOf(),
             listOf(),
             listOf()
         )
