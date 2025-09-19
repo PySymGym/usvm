@@ -43,7 +43,7 @@ private fun cloneDefaultOptions(gameMap: GameMap, predict: (GameState) -> UInt):
         Searcher.BFS -> PathSelectionStrategy.BFS
         Searcher.DFS -> PathSelectionStrategy.DFS
     }
-    val stepLimit = (gameMap.stepsToStart + gameMap.stepsToStart).toULong()
+    val stepLimit = (gameMap.stepsToStart + gameMap.stepsToPlay).toULong()
     return defaultOptions.copy(
         pathSelectionStrategies = listOf(defaultSearcher, PathSelectionStrategy.AI),
         stepLimit = stepLimit,
