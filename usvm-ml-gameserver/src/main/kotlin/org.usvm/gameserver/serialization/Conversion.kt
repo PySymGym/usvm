@@ -82,11 +82,18 @@ var pcs = mutableSetOf<Int>()
 fun <Block : BasicBlock> createGameState(
     game: Game<Block>
 ): GameState {
-    val (vertices, stateWrappers, blockGraph, pathConditionVertices) = game
+    val (vertices, stateWrappers, blockGraph, _) = game
     val states = stateWrappers.map { it.toState() }
+    val pcVertices = mutableListOf<PathConditionVertex>()
+    for (state in states) {
+        if (!pcs.contains(state.pathCondition.id)) {
+            pcVertices.add(state.pathCondition)
+            pcs.add(state.pathCondition.id)
+        }
+    }
     return GameState(
         graphVertices = vertices.map { it.toGameMapVertex() },
-        pathConditionVertices = pathConditionVertices.map { it.toPathConditionVertex() },
+        pathConditionVertices = pcVertices,
         states = states,
         map = blockGraph.toGameMapEdge(vertices)
     )
