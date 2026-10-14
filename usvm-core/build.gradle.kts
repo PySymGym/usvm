@@ -11,6 +11,9 @@ dependencies {
     testImplementation(Libs.mockk)
     testImplementation(Libs.junit_jupiter_params)
     testImplementation(Libs.ksmt_yices)
+
+    implementation(Libs.onnxruntime)
+    implementation(Libs.onnxruntime_gpu)
 }
 
 publishing {
