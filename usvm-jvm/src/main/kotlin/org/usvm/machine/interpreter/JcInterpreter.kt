@@ -87,7 +87,7 @@ typealias JcStepScope = StepScope<JcState, JcType, JcInst, JcContext>
 class JcInterpreter(
     private val ctx: JcContext,
     private val applicationGraph: JcApplicationGraph,
-    private val blockGraph: JcBlockGraph,
+    private val blockGraph: JcBlockGraph?,
     private val options: JcMachineOptions,
     private val observer: JcInterpreterObserver? = null,
     var forkBlackList: UForkBlackList<JcState, JcInst> = UForkBlackList.createDefault(),
@@ -266,7 +266,7 @@ class JcInterpreter(
                 scope.doWithState {
                     newStmt(entryPoint)
                 }
-                blockGraph.addNewMethod(stmt.method)
+                blockGraph?.addNewMethod(stmt.method)
             }
 
             is JcConcreteMethodCallInst -> {
@@ -299,7 +299,7 @@ class JcInterpreter(
                 scope.doWithState {
                     addNewMethodCall(stmt, entryPoint)
                 }
-                blockGraph.addNewMethodCall(stmt.originalInst(), stmt.nextStmt, entryPoint)
+                blockGraph?.addNewMethodCall(stmt.originalInst(), stmt.nextStmt, entryPoint)
             }
 
             is JcVirtualMethodCallInst -> {

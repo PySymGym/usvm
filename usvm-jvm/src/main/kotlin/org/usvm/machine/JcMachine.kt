@@ -9,6 +9,7 @@ import org.jacodb.api.jvm.ext.methods
 import org.usvm.CoverageZone
 import org.usvm.StateCollectionStrategy
 import org.usvm.UMachine
+import org.usvm.PathSelectionStrategy
 import org.usvm.UMachineOptions
 import org.usvm.api.targets.JcTarget
 import org.usvm.forkblacklists.TargetsReachableForkBlackList
@@ -49,12 +50,13 @@ class JcMachine(
 ) : UMachine<JcState>() {
     private val applicationGraph = JcApplicationGraph(cp)
     private val blockGraph = JcBlockGraph()
+    private val trackBlocks = options.pathSelectionStrategies.contains(PathSelectionStrategy.AI)
 
     private val typeSystem = JcTypeSystem(cp, options.typeOperationsTimeout)
     private val components = JcComponents(typeSystem, options)
     private val ctx = JcContext(cp, components)
 
-    private val interpreter = JcInterpreter(ctx, applicationGraph, blockGraph, jcMachineOptions, interpreterObserver)
+    private val interpreter = JcInterpreter(ctx, applicationGraph, if (trackBlocks) blockGraph else null, jcMachineOptions, interpreterObserver)
 
     private val cfgStatistics = CfgStatisticsImpl(applicationGraph)
 
@@ -63,7 +65,7 @@ class JcMachine(
         val initialStates = mutableMapOf<JcMethod, JcState>()
         methods.forEach {
             initialStates[it] = interpreter.getInitialState(it, targets)
-            blockGraph.addNewMethod(it)
+            if (trackBlocks) blockGraph.addNewMethod(it)
         }
 
         val methodsToTrackCoverage =

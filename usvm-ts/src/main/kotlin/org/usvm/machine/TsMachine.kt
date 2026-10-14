@@ -26,6 +26,7 @@ import org.usvm.machine.types.TsTypeSystem
 import org.usvm.ps.createPathSelector
 import org.usvm.statistics.CompositeUMachineObserver
 import org.usvm.statistics.CoverageStatistics
+import org.usvm.statistics.EmptyBlockGraph
 import org.usvm.statistics.StatisticsByMethodPrinter
 import org.usvm.statistics.StepsStatistics
 import org.usvm.statistics.TimeStatistics
@@ -196,6 +197,7 @@ class TsMachine(
             initialStates = initialStates,
             options = options,
             applicationGraph = graph,
+            blockGraph = EmptyBlockGraph(),
             timeStatistics = timeStatistics,
             coverageStatisticsFactory = { coverageStatistics },
             cfgStatisticsFactory = { cfgStatistics },

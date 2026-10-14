@@ -38,7 +38,7 @@ class StringConcatSamplesTest : JavaMethodTestRunner() {
         }
 
         return JcMachine(cp, options).use { machine ->
-            val states = machine.analyze(method.method)
+            val states = machine.analyze(method.method).first
             states.map { testResolver.resolve(method, it) }
         }
     }
