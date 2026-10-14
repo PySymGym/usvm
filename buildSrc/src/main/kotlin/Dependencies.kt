@@ -22,6 +22,10 @@ object Versions {
     const val shadow = "8.3.3"
     const val slf4j = "1.6.1"
 
+    const val onnxruntime = "1.15.1"
+    const val ktor = "2.3.10"
+    const val kotlinxCLI = "0.3.6"
+
     // versions for jvm samples
     object Samples {
         const val lombok = "1.18.20"
@@ -248,6 +252,51 @@ object Libs {
         name = "clikt",
         version = Versions.clikt
     )
+
+    // https://github.com/microsoft/onnxruntime
+    val onnxruntime = dep(
+        group = "com.microsoft.onnxruntime",
+        name = "onnxruntime",
+        version = Versions.onnxruntime
+    )
+
+    val onnxruntime_gpu = dep(
+        group = "com.microsoft.onnxruntime",
+        name = "onnxruntime_gpu",
+        version = Versions.onnxruntime
+    )
+
+    // https://ktor.io/
+    val ktor_server_core = dep(
+        group = "io.ktor",
+        name = "ktor-server-core",
+        version = Versions.ktor
+    )
+
+    val ktor_server_netty = dep(
+        group = "io.ktor",
+        name = "ktor-server-netty",
+        version = Versions.ktor
+    )
+
+    val ktor_server_websockets = dep(
+        group = "io.ktor",
+        name = "ktor-server-websockets",
+        version = Versions.ktor
+    )
+
+    val ktor_serialization = dep(
+        group = "io.ktor",
+        name = "ktor-serialization-kotlinx-json",
+        version = Versions.ktor
+    )
+
+    // https://github.com/Kotlin/kotlinx-cli
+    val kotlinx_cli = dep(
+        group = "org.jetbrains.kotlinx",
+        name = "kotlinx-cli",
+        version = Versions.kotlinxCLI
+    )
 }
 
 object Plugins {
@@ -270,6 +319,12 @@ object Plugins {
     object Shadow : ProjectPlugin(
         id = "com.gradleup.shadow",
         version = Versions.shadow
+    )
+
+    // https://ktor.io/
+    object Ktor : ProjectPlugin(
+        id = "io.ktor.plugin",
+        version = Versions.ktor
     )
 }
 
