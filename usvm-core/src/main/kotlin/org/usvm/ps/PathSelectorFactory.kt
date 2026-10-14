@@ -12,7 +12,10 @@ import org.usvm.algorithms.RandomizedPriorityCollection
 import org.usvm.merging.CloseStatesSearcherImpl
 import org.usvm.merging.MergingPathSelector
 import org.usvm.statistics.ApplicationGraph
+import org.usvm.statistics.BasicBlock
+import org.usvm.statistics.BlockGraph
 import org.usvm.statistics.CoverageStatistics
+import org.usvm.statistics.StepsStatistics
 import org.usvm.statistics.TimeStatistics
 import org.usvm.statistics.distances.CallGraphStatistics
 import org.usvm.statistics.distances.CallStackDistanceCalculator
@@ -22,23 +25,28 @@ import org.usvm.statistics.distances.InterprocDistanceCalculator
 import org.usvm.statistics.distances.MultiTargetDistanceCalculator
 import org.usvm.statistics.distances.ReachabilityKind
 import org.usvm.targets.UTarget
+import org.usvm.util.Predictor
 import org.usvm.util.RealTimeStopwatch
 import org.usvm.util.log2
+import org.usvm.utils.Game
 import kotlin.math.max
 import kotlin.random.Random
 import kotlin.time.Duration
 
-private fun <Method, Statement, Target, State> createPathSelector(
+private fun <Method, Statement, Target, State, Block> createPathSelector(
     initialStates: List<State>,
     options: UMachineOptions,
     applicationGraph: ApplicationGraph<Method, Statement>,
+    blockGraph: BlockGraph<Method, Block, Statement>,
     coverageStatisticsFactory: () -> CoverageStatistics<Method, Statement, State>? = { null },
     cfgStatisticsFactory: () -> CfgStatistics<Method, Statement>? = { null },
     callGraphStatisticsFactory: () -> CallGraphStatistics<Method>? = { null },
+    stepsStatisticsFactory: () -> StepsStatistics<Method, State>? = { null },
     loopStatisticFactory: () -> StateLoopTracker<*, Statement, State>? = { null },
 ): UPathSelector<State>
     where Target : UTarget<Statement, Target>,
-          State : UState<*, Method, Statement, *, Target, State> {
+          State : UState<*, Method, Statement, *, Target, State>,
+          Block : BasicBlock {
 
     val strategies = options.pathSelectionStrategies
     require(strategies.isNotEmpty()) { "At least one path selector strategy should be specified" }
@@ -102,6 +110,13 @@ private fun <Method, Statement, Target, State> createPathSelector(
                 applicationGraph,
                 random
             )
+
+            PathSelectionStrategy.AI -> createAIPathSelector(
+                requireNotNull(coverageStatisticsFactory()) { "Coverage statistics is required for AI path selector" },
+                requireNotNull(stepsStatisticsFactory()) { "Steps statistics is required for AI path selector" },
+                blockGraph,
+                options
+            )
         }
     }
 
@@ -140,40 +155,89 @@ private fun <Method, Statement, Target, State> createPathSelector(
 
             ParallelPathSelector(wrappedSelectors)
         }
+
+        PathSelectorCombinationStrategy.SEQUENTIAL -> {
+            val selector = SequentialPathSelector(selectors, options.stepsToStart, requireNotNull(stepsStatisticsFactory()))
+            val resultSelector = createMergingPathSelector(initialStates, selector, options, cfgStatisticsFactory)
+            resultSelector.add(initialStates.toList())
+
+            resultSelector
+        }
     }
 
     return selector
 }
 
-fun <Method, Statement, Target, State> createPathSelector(
+@Suppress("UNCHECKED_CAST")
+fun <Method, Statement, State, Block> createAIPathSelector(
+    coverageStatistics: CoverageStatistics<Method, Statement, State>,
+    stepsStatistics: StepsStatistics<Method, State>,
+    blockGraph: BlockGraph<Method, Block, Statement>,
+    options: UMachineOptions
+): UPathSelector<State> where State : UState<*, Method, Statement, *, *, State>,
+                              Block : BasicBlock {
+    with(coverageStatistics) {
+        addOnCoveredObserver { _, _, statement ->
+            blockGraph.blockOf(statement).coveredByTest = true
+        }
+        fun addBlocksToCoverageZone(method: Method) {
+            val blocksOfMethod = blockGraph.blocks.filter { blockGraph.methodOf(it) == method }
+            blocksOfMethod.forEach { it.inCoverageZone = true }
+        }
+        // initial methods
+        coverageZone.forEach(::addBlocksToCoverageZone)
+        addOnMethodAddedObserver { method ->
+            addBlocksToCoverageZone(method)
+        }
+    }
+
+    val predictor = options.oracle as? Predictor<Game<Block>>
+    requireNotNull(predictor) { "Oracle is required for AI path selector" }
+
+    return AIPathSelector(
+        blockGraph,
+        stepsStatistics,
+        predictor
+    )
+}
+
+fun <Method, Statement, Target, State, Block> createPathSelector(
     initialState: State,
     options: UMachineOptions,
     applicationGraph: ApplicationGraph<Method, Statement>,
+    blockGraph: BlockGraph<Method, Block, Statement>,
     coverageStatisticsFactory: () -> CoverageStatistics<Method, Statement, State>? = { null },
     cfgStatisticsFactory: () -> CfgStatistics<Method, Statement>? = { null },
     callGraphStatisticsFactory: () -> CallGraphStatistics<Method>? = { null },
+    stepsStatisticsFactory: () -> StepsStatistics<Method, State>? = { null },
     loopStatisticFactory: () -> StateLoopTracker<*, Statement, State>? = { null },
-): UPathSelector<State> where Target : UTarget<Statement, Target>, State : UState<*, Method, Statement, *, Target, State> =
+): UPathSelector<State> where Target : UTarget<Statement, Target>, State : UState<*, Method, Statement, *, Target, State>,
+                              Block : BasicBlock =
     createPathSelector(
         listOf(initialState),
         options,
         applicationGraph,
+        blockGraph,
         coverageStatisticsFactory,
         cfgStatisticsFactory,
         callGraphStatisticsFactory,
+        stepsStatisticsFactory,
         loopStatisticFactory
     )
 
-fun <Method, Statement, Target, State> createPathSelector(
+fun <Method, Statement, Target, State, Block> createPathSelector(
     initialStates: Map<Method, State>,
     options: UMachineOptions,
     applicationGraph: ApplicationGraph<Method, Statement>,
+    blockGraph: BlockGraph<Method, Block, Statement>,
     timeStatistics: TimeStatistics<Method, State>,
     coverageStatisticsFactory: () -> CoverageStatistics<Method, Statement, State>? = { null },
     cfgStatisticsFactory: () -> CfgStatistics<Method, Statement>? = { null },
     callGraphStatisticsFactory: () -> CallGraphStatistics<Method>? = { null },
+    stepsStatisticsFactory: () -> StepsStatistics<Method, State>? = { null },
     loopStatisticFactory: () -> StateLoopTracker<*, Statement, State>? = { null },
-): UPathSelector<State> where Target : UTarget<Statement, Target>, State : UState<*, Method, Statement, *, Target, State> {
+): UPathSelector<State> where Target : UTarget<Statement, Target>, State : UState<*, Method, Statement, *, Target, State>,
+                              Block : BasicBlock {
     val hasSingleEntryPoint = initialStates.size == 1
     val hasUnlimitedScheduling = options.timeout == Duration.INFINITE &&
         options.maxEntryPointTimeQuantum == Duration.INFINITE
@@ -182,9 +246,11 @@ fun <Method, Statement, Target, State> createPathSelector(
             initialStates.values.toList(),
             options,
             applicationGraph,
+            blockGraph,
             coverageStatisticsFactory,
             cfgStatisticsFactory,
             callGraphStatisticsFactory,
+            stepsStatisticsFactory,
             loopStatisticFactory
         )
     }
@@ -199,9 +265,11 @@ fun <Method, Statement, Target, State> createPathSelector(
             initialStates.getValue(method),
             options,
             applicationGraph,
+            blockGraph,
             coverageStatisticsFactory,
             cfgStatisticsFactory,
             callGraphStatisticsFactory,
+            stepsStatisticsFactory,
             loopStatisticFactory
         )
 

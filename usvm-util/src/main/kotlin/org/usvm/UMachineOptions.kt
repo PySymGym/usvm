@@ -1,5 +1,6 @@
 package org.usvm
 
+import org.usvm.util.Predictor
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -92,7 +93,12 @@ enum class PathSelectionStrategy {
      * reachability.
      * States are selected randomly with distribution based on distance to targets.
      */
-    TARGETED_CALL_STACK_LOCAL_RANDOM
+    TARGETED_CALL_STACK_LOCAL_RANDOM,
+
+    /**
+     * Selects the next state based on prediction.
+     */
+    AI
 }
 
 enum class PathSelectorCombinationStrategy {
@@ -104,7 +110,12 @@ enum class PathSelectorCombinationStrategy {
     /**
      * Multiple path selectors have independent state sets and are interleaved.
      */
-    PARALLEL
+    PARALLEL,
+
+    /**
+     * Two path selectors have a common state set and are used one after another.
+     */
+    SEQUENTIAL
 }
 
 enum class PathSelectorFairnessStrategy {
@@ -273,4 +284,15 @@ data class UMachineOptions(
      * Disable this for budget/exhaustion experiments that must retain those states between turns.
      */
     val removeCoveredEntryPoints: Boolean = true,
+
+    /**
+     * Limit for [PathSelectorCombinationStrategy.SEQUENTIAL] combinator when the switch
+     * from one path selector to another occurs.
+     */
+    val stepsToStart: UInt = 0u,
+
+    /**
+     * Predictor for AI path selector.
+     */
+    val oracle: Predictor<*>? = null
 )

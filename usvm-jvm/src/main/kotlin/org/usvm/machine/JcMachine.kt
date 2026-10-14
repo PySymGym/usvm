@@ -37,6 +37,7 @@ import org.usvm.statistics.distances.MultiTargetDistanceCalculator
 import org.usvm.statistics.distances.PlainCallGraphStatistics
 import org.usvm.stopstrategies.createStopStrategy
 import org.usvm.util.originalInst
+import kotlin.math.roundToInt
 
 val logger = object : KLogging() {}.logger
 
@@ -47,20 +48,22 @@ class JcMachine(
     private val interpreterObserver: JcInterpreterObserver? = null,
 ) : UMachine<JcState>() {
     private val applicationGraph = JcApplicationGraph(cp)
+    private val blockGraph = JcBlockGraph()
 
     private val typeSystem = JcTypeSystem(cp, options.typeOperationsTimeout)
     private val components = JcComponents(typeSystem, options)
     private val ctx = JcContext(cp, components)
 
-    private val interpreter = JcInterpreter(ctx, applicationGraph, jcMachineOptions, interpreterObserver)
+    private val interpreter = JcInterpreter(ctx, applicationGraph, blockGraph, jcMachineOptions, interpreterObserver)
 
     private val cfgStatistics = CfgStatisticsImpl(applicationGraph)
 
-    fun analyze(methods: List<JcMethod>, targets: List<JcTarget> = emptyList()): List<JcState> {
+    fun analyze(methods: List<JcMethod>, targets: List<JcTarget> = emptyList()): Pair<List<JcState>, Float> {
         logger.debug("{}.analyze({})", this, methods)
         val initialStates = mutableMapOf<JcMethod, JcState>()
         methods.forEach {
             initialStates[it] = interpreter.getInitialState(it, targets)
+            blockGraph.addNewMethod(it)
         }
 
         val methodsToTrackCoverage =
@@ -96,14 +99,18 @@ class JcMachine(
         val timeStatistics = TimeStatistics<JcMethod, JcState>()
         val loopTracker = JcLoopTracker()
 
+        val stepsStatistics = StepsStatistics<JcMethod, JcState>()
+
         val pathSelector = createPathSelector(
             initialStates,
             options,
             applicationGraph,
+            blockGraph,
             timeStatistics,
             { coverageStatistics },
             { transparentCfgStatistics },
             { callGraphStatistics },
+            { stepsStatistics },
             { loopTracker }
         )
 
@@ -116,8 +123,6 @@ class JcMachine(
                 StateCollectionStrategy.REACHED_TARGET -> TargetsReachedStatesCollector()
                 StateCollectionStrategy.ALL -> AllStatesCollector()
             }
-
-        val stepsStatistics = StepsStatistics<JcMethod, JcState>()
 
         val stopStrategy = createStopStrategy(
             options,
@@ -199,10 +204,13 @@ class JcMachine(
             stopStrategy = stopStrategy,
         )
 
-        return statesCollector.collectedStates
+        val percentageCoverage = coverageStatistics.getMethodCoverage(methods.single())
+
+        return statesCollector.collectedStates to percentageCoverage
+
     }
 
-    fun analyze(method: JcMethod, targets: List<JcTarget> = emptyList()): List<JcState> =
+    fun analyze(method: JcMethod, targets: List<JcTarget> = emptyList()): Pair<List<JcState>, Float> =
         analyze(listOf(method), targets)
 
     /**

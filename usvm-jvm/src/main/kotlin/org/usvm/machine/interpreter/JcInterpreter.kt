@@ -47,6 +47,7 @@ import org.usvm.forkblacklists.UForkBlackList
 import org.usvm.jvm.util.name
 import org.usvm.jvm.util.outerClassInstanceField
 import org.usvm.machine.JcApplicationGraph
+import org.usvm.machine.JcBlockGraph
 import org.usvm.machine.JcConcreteMethodCallInst
 import org.usvm.machine.JcContext
 import org.usvm.machine.JcDynamicMethodCallInst
@@ -72,6 +73,7 @@ import org.usvm.machine.state.throwExceptionWithoutStackFrameDrop
 import org.usvm.memory.ULValue
 import org.usvm.memory.URegisterStackLValue
 import org.usvm.targets.UTargetsSet
+import org.usvm.util.originalInst
 import org.usvm.util.write
 import org.usvm.utils.ensureSat
 import org.usvm.utils.logAssertFailure
@@ -85,6 +87,7 @@ typealias JcStepScope = StepScope<JcState, JcType, JcInst, JcContext>
 class JcInterpreter(
     private val ctx: JcContext,
     private val applicationGraph: JcApplicationGraph,
+    private val blockGraph: JcBlockGraph,
     private val options: JcMachineOptions,
     private val observer: JcInterpreterObserver? = null,
     var forkBlackList: UForkBlackList<JcState, JcInst> = UForkBlackList.createDefault(),
@@ -263,6 +266,7 @@ class JcInterpreter(
                 scope.doWithState {
                     newStmt(entryPoint)
                 }
+                blockGraph.addNewMethod(stmt.method)
             }
 
             is JcConcreteMethodCallInst -> {
@@ -295,6 +299,7 @@ class JcInterpreter(
                 scope.doWithState {
                     addNewMethodCall(stmt, entryPoint)
                 }
+                blockGraph.addNewMethodCall(stmt.originalInst(), stmt.nextStmt, entryPoint)
             }
 
             is JcVirtualMethodCallInst -> {
