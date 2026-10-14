@@ -23,7 +23,7 @@ object Versions {
     const val slf4j = "1.6.1"
 
     const val onnxruntime = "1.15.1"
-    const val ktor = "2.3.10"
+    const val ktor = "3.2.0"
     const val kotlinxCLI = "0.3.6"
 
     // versions for jvm samples

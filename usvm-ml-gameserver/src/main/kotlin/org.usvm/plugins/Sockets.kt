@@ -1,7 +1,7 @@
 package org.usvm.plugins
 
-import io.ktor.serialization.*
-import io.ktor.serialization.kotlinx.*
+import io.ktor.serialization.WebsocketDeserializeException
+import io.ktor.serialization.kotlinx.KotlinxWebsocketSerializationConverter
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
@@ -12,14 +12,14 @@ import org.usvm.gameserver.*
 import org.usvm.errors.AlreadyInGameError
 import org.usvm.errors.HandledError
 import org.usvm.errors.NotStartedYetError
-import java.time.*
 import java.util.*
 import kotlin.collections.LinkedHashSet
+import kotlin.time.Duration.Companion.seconds
 
 fun Application.configureSockets() {
     install(WebSockets) {
-        pingPeriod = Duration.ofSeconds(15)
-        timeout = Duration.ofSeconds(15)
+        pingPeriod = 15.seconds
+        timeout = 15.seconds
         maxFrameSize = Long.MAX_VALUE
         masking = false
         contentConverter = KotlinxWebsocketSerializationConverter(Json)

@@ -11,18 +11,17 @@ application {
     mainClass.set("org.usvm.MainKt")
 }
 
-ktor {
-    fatJar {
-        archiveFileName.set("app.jar")
-    }
-}
-
 repositories {
     mavenCentral()
     maven { url = uri("https://maven.pkg.jetbrains.space/public/p/ktor/eap") }
 }
 tasks.withType<KotlinCompile> {
     kotlinOptions.allWarningsAsErrors = false
+}
+
+tasks.shadowJar {
+    archiveFileName.set("app.jar")
+    mergeServiceFiles()
 }
 
 tasks.test {
