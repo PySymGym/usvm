@@ -11,6 +11,7 @@ import org.usvm.ts.pbt.model.PropertyInput
 import org.usvm.ts.pbt.model.TypeScriptEntryPoint
 import org.usvm.ts.pbt.testResourcesRoot
 import java.nio.file.Files
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -448,17 +449,32 @@ class FastCheckProcessClientTest {
 
     private fun processIsAlive(pidFile: Path): Boolean {
         val pid = pidFile.takeIf(Files::exists)?.readText()?.trim()?.toLongOrNull() ?: return false
-        val process = ProcessHandle.of(pid).orElse(null) ?: return false
 
-        return process.isAlive
+        return !processIsDead(pid)
     }
 
     private fun terminateProcess(pidFile: Path) {
         val pid = pidFile.takeIf(Files::exists)?.readText()?.trim()?.toLongOrNull() ?: return
-        val process = ProcessHandle.of(pid).orElse(null) ?: return
+        ProcessHandle.of(pid).ifPresent { it.destroyForcibly() }
 
-        process.destroyForcibly()
-        process.onExit().get(1, TimeUnit.SECONDS)
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+        while (!processIsDead(pid) && System.nanoTime() < deadline) Thread.sleep(10)
+    }
+
+    /**
+     * A killed process lingers as a zombie until its (reparented) parent reaps it. Environments without a
+     * reaping init (e.g. containers) keep the zombie visible to ProcessHandle.isAlive() and onExit() never
+     * completes, so death is decided from the /proc state: absent or Z means dead.
+     */
+    private fun processIsDead(pid: Long): Boolean {
+        if (ProcessHandle.of(pid).isEmpty()) return true
+
+        return try {
+            val stat = Files.readString(Path.of("/proc", pid.toString(), "stat"))
+            stat.get(stat.lastIndexOf(')') + 2) == 'Z'
+        } catch (_: NoSuchFileException) {
+            true
+        }
     }
 
     private companion object {

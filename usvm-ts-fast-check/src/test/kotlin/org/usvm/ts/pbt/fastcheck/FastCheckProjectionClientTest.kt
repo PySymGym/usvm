@@ -9,10 +9,9 @@ import org.usvm.ts.pbt.model.IntegerDomain
 import org.usvm.ts.pbt.model.JsConcreteValue
 import org.usvm.ts.pbt.model.PropertyDomain
 import java.nio.file.Files
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
-import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
 import kotlin.io.path.createTempFile
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.readText
@@ -415,39 +414,37 @@ class FastCheckProjectionClientTest {
 
     private fun terminateAdapter(pidFile: Path): Boolean {
         val pid = readAdapterPid(pidFile) ?: return true
-        val process = ProcessHandle.of(pid).orElse(null) ?: return true
+        ProcessHandle.of(pid).ifPresent { it.destroyForcibly() }
 
-        process.destroyForcibly()
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+        while (!processIsDead(pid) && System.nanoTime() < deadline) Thread.sleep(10)
 
-        try {
-            process.onExit().get(1, TimeUnit.SECONDS)
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
-
-            return true
-        }
-
-        return !process.isAlive
+        return processIsDead(pid)
     }
 
     private fun adapterIsTerminated(pidFile: Path): Boolean {
         val pid = readAdapterPid(pidFile) ?: return true
-        val process = ProcessHandle.of(pid).orElse(null)
-        if (process == null || !process.isAlive) return true
 
-        try {
-            process.onExit().get(1, TimeUnit.SECONDS)
-        } catch (_: TimeoutException) {
-            return false
-        } catch (_: ExecutionException) {
-            return !process.isAlive
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+        while (!processIsDead(pid) && System.nanoTime() < deadline) Thread.sleep(10)
 
-            return !process.isAlive
+        return processIsDead(pid)
+    }
+
+    /**
+     * A killed process lingers as a zombie until its (reparented) parent reaps it. Environments without a
+     * reaping init (e.g. containers) keep the zombie visible to ProcessHandle.isAlive() and onExit() never
+     * completes, so death is decided from the /proc state: absent or Z means dead.
+     */
+    private fun processIsDead(pid: Long): Boolean {
+        if (ProcessHandle.of(pid).isEmpty()) return true
+
+        return try {
+            val stat = Files.readString(Path.of("/proc", pid.toString(), "stat"))
+            stat.get(stat.lastIndexOf(')') + 2) == 'Z'
+        } catch (_: NoSuchFileException) {
+            true
         }
-
-        return !process.isAlive
     }
 
     private fun readAdapterPid(pidFile: Path): Long? {

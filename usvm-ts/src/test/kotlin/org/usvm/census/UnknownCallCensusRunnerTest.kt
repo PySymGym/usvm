@@ -1,6 +1,7 @@
 package org.usvm.census
 
 import java.nio.file.Files
+import java.nio.file.NoSuchFileException
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -116,10 +117,7 @@ class UnknownCallCensusRunnerTest {
             assertTrue(start.elapsedNow() < 3.seconds)
 
             val childPid = Files.readString(childPidFile).toLong()
-            val childIsAlive = ProcessHandle.of(childPid)
-                .map(ProcessHandle::isAlive)
-                .orElse(false)
-            assertFalse(childIsAlive)
+            assertTrue(processIsDead(childPid), "Bounded-output child is still running")
         } finally {
             temporaryRoot.toFile().deleteRecursively()
         }
@@ -170,5 +168,21 @@ class UnknownCallCensusRunnerTest {
         val methods = roundRobin(methodsByClass)
 
         assertEquals(listOf("a1", "b1", "c1", "a2", "c2", "a3"), methods)
+    }
+
+    /**
+     * A killed process lingers as a zombie until its (reparented) parent reaps it. Environments without a
+     * reaping init (e.g. containers) keep the zombie visible to ProcessHandle.isAlive(), so death is
+     * decided from the /proc state: absent or Z means dead.
+     */
+    private fun processIsDead(pid: Long): Boolean {
+        if (ProcessHandle.of(pid).isEmpty()) return true
+
+        return try {
+            val stat = Files.readString(java.nio.file.Path.of("/proc", pid.toString(), "stat"))
+            stat.get(stat.lastIndexOf(')') + 2) == 'Z'
+        } catch (_: NoSuchFileException) {
+            true
+        }
     }
 }
