@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -157,12 +158,26 @@ async function assertProcessExited(pid: number): Promise<void> {
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
-
-    return true;
   } catch (error: unknown) {
     if (isMissingProcess(error)) return false;
 
     throw error;
+  }
+
+  // A SIGKILLed descendant lingers as a zombie until its (reparented) parent reaps it. Containers
+  // frequently lack a reaping PID 1, so a zombie is dead for the purposes of this test even though
+  // kill(pid, 0) still succeeds.
+  return processState(pid) !== 'Z';
+}
+
+function processState(pid: number): string | null {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+
+    // The state field follows the (parenthesis-enclosed, possibly spaced) comm field; anchor on the last ')'.
+    return stat.slice(stat.lastIndexOf(')') + 2).charAt(0) || null;
+  } catch {
+    return null;
   }
 }
 
